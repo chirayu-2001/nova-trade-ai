@@ -1,4 +1,4 @@
-"""Natural Language Query Engine — text-to-SQL using Claude Haiku."""
+"""Natural Language Query Engine — text-to-SQL using Claude 3.5 Sonnet."""
 
 import json
 import logging
@@ -7,59 +7,22 @@ import anthropic
 
 from backend.config.settings import settings
 from backend.models.database import execute_query
+from backend.prompts.loader import load_prompt
 
 logger = logging.getLogger(__name__)
 
 client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-
-SYSTEM_PROMPT = """You are a SQL query generator for a trade document validation system.
-The database uses SQLite with these tables:
-
-shipments (id TEXT, customer_id TEXT, customer_name TEXT, status TEXT, decision TEXT,
-           decision_reasoning TEXT, draft_email TEXT, overall_confidence REAL,
-           document_count INTEGER, created_at TIMESTAMP, updated_at TIMESTAMP)
--- status: incoming, processing, extracted, validated, approved, flagged, amendment_required, stored, error
--- decision: approved, flagged, amendment_required
-
-documents (id TEXT, shipment_id TEXT, document_type TEXT, file_path TEXT, file_name TEXT,
-           extracted_json TEXT, extraction_confidence_avg REAL, model_used TEXT,
-           tokens_used INTEGER, processing_time_ms INTEGER, created_at TIMESTAMP)
--- document_type: bill_of_lading, commercial_invoice, packing_list, certificate_of_origin
-
-validations (id TEXT, document_id TEXT, shipment_id TEXT, field_name TEXT, found_value TEXT,
-             expected_value TEXT, match_result TEXT, match_confidence REAL,
-             extraction_confidence REAL, severity TEXT, reasoning TEXT, created_at TIMESTAMP)
--- match_result: match, mismatch, uncertain
--- severity: critical, high, medium, low
-
-Rules:
-1. ONLY generate SELECT queries. Never INSERT, UPDATE, DELETE, or DROP.
-2. Use proper JOIN syntax when combining tables.
-3. For date filtering, use SQLite date functions: date('now'), date('now', '-7 days')
-4. Return ONLY a JSON object: {"sql": "SELECT ...", "explanation": "This query..."}
-5. Keep queries simple and efficient.
-
-Examples:
-User: "How many shipments were flagged this week?"
-{"sql": "SELECT COUNT(*) as count FROM shipments WHERE decision = 'flagged' AND created_at >= date('now', '-7 days')", "explanation": "Counts shipments with 'flagged' decision from the last 7 days."}
-
-User: "Show me all critical mismatches"
-{"sql": "SELECT v.shipment_id, v.field_name, v.found_value, v.expected_value, v.reasoning, s.customer_name FROM validations v JOIN shipments s ON v.shipment_id = s.id WHERE v.match_result = 'mismatch' AND v.severity = 'critical' ORDER BY v.created_at DESC", "explanation": "Lists all critical severity mismatches with shipment details."}
-
-User: "What's the average confidence score?"
-{"sql": "SELECT ROUND(AVG(extraction_confidence_avg), 3) as avg_confidence FROM documents WHERE extraction_confidence_avg > 0", "explanation": "Calculates the average extraction confidence across all documents."}
-
-User: "Show me everything pending review for HomeStyle Germany"
-{"sql": "SELECT s.id, s.status, s.decision, s.created_at, v.field_name, v.found_value, v.expected_value, v.match_result, v.severity FROM shipments s LEFT JOIN validations v ON s.id = v.shipment_id WHERE s.customer_name LIKE '%HomeStyle%' AND s.decision = 'flagged' ORDER BY s.created_at DESC", "explanation": "Lists flagged shipments for HomeStyle Germany with validation details."}"""
+SYSTEM_PROMPT = load_prompt("query_sql.md")
 
 
 def query_natural_language(question: str) -> dict:
     """Process a natural language question into SQL, execute, and return results."""
-    # Step 1: Generate SQL using Claude Haiku
+    # Step 1: Generate SQL using Claude 3.5 Sonnet
     try:
         response = client.messages.create(
             model=settings.query_model,
             max_tokens=500,
+            temperature=settings.query_temperature,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": question}],
         )
@@ -125,6 +88,7 @@ def _generate_nl_answer(question: str, results: list[dict]) -> str:
         response = client.messages.create(
             model=settings.query_model,
             max_tokens=300,
+            temperature=settings.query_temperature,
             system="Given a user question and database query results, provide a brief, helpful natural language answer. Only state what the data shows. Be concise.",
             messages=[{
                 "role": "user",

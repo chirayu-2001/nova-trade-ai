@@ -12,10 +12,15 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # Model configuration
-    extraction_model: str = "claude-haiku-4-5-20251001"
-    validation_model: str = "claude-haiku-4-5-20251001"
-    routing_model: str = "claude-haiku-4-5-20251001"
-    query_model: str = "claude-haiku-4-5-20251001"
+    extraction_model: str = "claude-sonnet-4-6"
+    validation_model: str = "claude-sonnet-4-6"
+    routing_model: str = "claude-sonnet-4-6"
+    query_model: str = "claude-sonnet-4-6"
+
+    extraction_temperature: float = 0.0
+    validation_temperature: float = 0.0
+    routing_temperature: float = 0.2
+    query_temperature: float = 0.0
 
     # Thresholds
     confidence_threshold: float = 0.85

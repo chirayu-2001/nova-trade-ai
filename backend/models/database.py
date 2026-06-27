@@ -87,9 +87,77 @@ def init_database():
         CREATE INDEX IF NOT EXISTS idx_documents_shipment ON documents(shipment_id);
         CREATE INDEX IF NOT EXISTS idx_validations_shipment ON validations(shipment_id);
         CREATE INDEX IF NOT EXISTS idx_validations_result ON validations(match_result);
+
+        CREATE TABLE IF NOT EXISTS pipeline_checkpoints (
+            shipment_id TEXT PRIMARY KEY,
+            customer_id TEXT,
+            status TEXT NOT NULL,
+            retry_count INTEGER DEFAULT 0,
+            error TEXT,
+            state_json TEXT NOT NULL,
+            updated_at TIMESTAMP NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_pipeline_checkpoints_status
+            ON pipeline_checkpoints(status);
+
+        CREATE TABLE IF NOT EXISTS langgraph_checkpoints (
+            namespace TEXT PRIMARY KEY,
+            payload BLOB NOT NULL,
+            updated_at TIMESTAMP NOT NULL
+        );
     """)
     conn.commit()
     conn.close()
+
+
+def store_pipeline_checkpoint(state: dict[str, Any]):
+    """Persist the latest pipeline state for crash recovery and observability."""
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO pipeline_checkpoints
+            (shipment_id, customer_id, status, retry_count, error, state_json, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(shipment_id) DO UPDATE SET
+                customer_id = excluded.customer_id,
+                status = excluded.status,
+                retry_count = excluded.retry_count,
+                error = excluded.error,
+                state_json = excluded.state_json,
+                updated_at = excluded.updated_at
+            """,
+            (
+                state.get("shipment_id"),
+                state.get("customer_id"),
+                state.get("status", "unknown"),
+                state.get("retry_count", 0),
+                state.get("error"),
+                json.dumps(state, default=str),
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_pipeline_checkpoint(shipment_id: str) -> Optional[dict]:
+    """Return the latest durable pipeline checkpoint for a shipment."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT * FROM pipeline_checkpoints WHERE shipment_id = ?",
+            (shipment_id,),
+        ).fetchone()
+        if not row:
+            return None
+        result = dict(row)
+        result["state"] = json.loads(result.pop("state_json"))
+        return result
+    finally:
+        conn.close()
 
 
 def store_pipeline_result(state: dict[str, Any]):

@@ -1,7 +1,7 @@
 """Validator Agent — compares extracted fields against customer rules.
 
 Mostly deterministic matching with LLM fallback for semantic cases.
-70% of validation is code-based, 30% uses Claude Haiku for edge cases.
+70% of validation is code-based, 30% uses Claude for edge cases.
 """
 
 import logging
@@ -20,10 +20,12 @@ from backend.models.schemas import (
     FieldValidation,
     ValidationResult,
 )
+from backend.prompts.loader import load_prompt
 
 logger = logging.getLogger(__name__)
 
 client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+SEMANTIC_MATCH_PROMPT = load_prompt("semantic_match.md")
 
 # --- Field Matching Strategies ---
 
@@ -169,13 +171,10 @@ def semantic_match(found: str, expected: str) -> tuple[str, float]:
         response = client.messages.create(
             model=settings.validation_model,
             max_tokens=200,
+            temperature=settings.validation_temperature,
             messages=[{
                 "role": "user",
-                "content": f"""Do these two values refer to the same entity in a trade document context?
-Value 1: "{found}"
-Value 2: "{expected}"
-Consider abbreviations, formatting differences, and common trade terminology.
-Respond with ONLY a JSON object: {{"match": true/false, "confidence": 0.0-1.0, "reasoning": "brief explanation"}}"""
+                "content": SEMANTIC_MATCH_PROMPT.format(found=found, expected=expected)
             }],
         )
         import json
@@ -233,6 +232,19 @@ def match_field(found_value: str, rule: FieldRule) -> tuple[str, float, str]:
     return result, conf, reasoning
 
 
+def get_expected_for_ui(rule: FieldRule) -> str:
+    if rule.expected:
+        return rule.expected
+    if rule.match_type == "format":
+        return f"Format: {rule.pattern}"
+    if rule.match_type == "regex":
+        return f"Regex: {rule.pattern}"
+    if rule.match_type == "cross_document_consistent":
+        return "Match across docs"
+    if rule.match_type == "present_on_all":
+        return "Present on all docs"
+    return "N/A"
+
 # --- Main Validator ---
 
 def validate_document(
@@ -278,18 +290,39 @@ def validate_document(
                 extracted_field = getattr(extracted_data, mapped)
                 field_name = mapped
 
+        expected_ui = get_expected_for_ui(rule)
+        doc_type = extraction.document_type
+
         # Handle missing fields
         if extracted_field is None or not isinstance(extracted_field, ExtractedField):
-            if rule.required:
+            # Skip checking 'required' if this rule is inherently cross-document
+            if rule.match_type in ("cross_document_consistent", "present_on_all"):
+                continue
+
+            # Some fields are only expected on specific documents. If missing, don't flag unless it's a doc that should have it.
+            # E.g. don't flag missing country_of_origin on a Bill of Lading.
+            expected_fields = {
+                "bill_of_lading": {"consignee_name", "gross_weight", "port_of_loading", "port_of_discharge", "incoterms", "invoice_number"},
+                "commercial_invoice": {"consignee_name", "invoice_number", "hs_code", "incoterms"},
+                "packing_list": {"consignee_name", "invoice_number", "gross_weight", "net_weight"},
+                "certificate_of_origin": {"consignee_name", "country_of_origin", "invoice_number", "hs_code"},
+            }
+            
+            is_expected = True
+            if doc_type in expected_fields and field_name not in expected_fields[doc_type]:
+                is_expected = False
+
+            if rule.required and is_expected:
                 field_validations.append(FieldValidation(
                     field_name=rule_name,
+                    document_type=doc_type,
                     found_value=None,
-                    expected_value=rule.expected,
+                    expected_value=expected_ui,
                     result="mismatch",
                     match_confidence=1.0,
                     extraction_confidence=0.0,
                     severity=rule.severity,
-                    reasoning=f"Required field '{rule_name}' not found in extraction",
+                    reasoning=f"Required field '{rule_name}' not found in extraction (expected for {doc_type})",
                 ))
             continue
 
@@ -298,11 +331,15 @@ def validate_document(
 
         # If field is empty/None
         if not found_value or found_value.strip() == "":
+            if rule.match_type in ("cross_document_consistent", "present_on_all"):
+                continue
+                
             if rule.required:
                 field_validations.append(FieldValidation(
                     field_name=field_name,
+                    document_type=doc_type,
                     found_value=None,
-                    expected_value=rule.expected,
+                    expected_value=expected_ui,
                     result="mismatch",
                     match_confidence=1.0,
                     extraction_confidence=extraction_conf,
@@ -316,8 +353,9 @@ def validate_document(
         if extraction_conf < settings.confidence_threshold:
             field_validations.append(FieldValidation(
                 field_name=field_name,
+                document_type=doc_type,
                 found_value=found_value,
-                expected_value=rule.expected,
+                expected_value=expected_ui,
                 result="uncertain",
                 match_confidence=0.0,
                 extraction_confidence=extraction_conf,
@@ -332,8 +370,9 @@ def validate_document(
 
         field_validations.append(FieldValidation(
             field_name=field_name,
+            document_type=doc_type,
             found_value=found_value,
-            expected_value=rule.expected,
+            expected_value=expected_ui,
             result=result,
             match_confidence=match_conf,
             extraction_confidence=extraction_conf,

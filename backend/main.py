@@ -16,6 +16,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from backend.config.settings import settings
 from backend.models.database import (
+    get_pipeline_checkpoint,
     get_shipment_detail,
     get_shipments,
     init_database,
@@ -45,6 +46,17 @@ app.add_middleware(
 # In-memory status tracking for SSE
 pipeline_status: dict[str, dict] = {}
 
+PROGRESS_BY_STATUS = {
+    "incoming": 0.0,
+    "extracting": 0.2,
+    "extracted": 0.35,
+    "validated": 0.55,
+    "cross_validated": 0.7,
+    "decided": 0.85,
+    "stored": 1.0,
+    "error": 1.0,
+}
+
 
 @app.on_event("startup")
 async def startup():
@@ -67,6 +79,18 @@ def _run_pipeline_background(
     customer_id: str,
 ):
     """Run pipeline in background thread and update status."""
+    def status_callback(state: dict):
+        status = state.get("status", "unknown")
+        decision = (state.get("decision_result") or {}).get("decision")
+        pipeline_status[shipment_id] = {
+            "status": status,
+            "progress": PROGRESS_BY_STATUS.get(status, 0.0),
+            "retry_count": state.get("retry_count", 0),
+            "decision": decision,
+            "error": state.get("error"),
+            "timestamps": state.get("timestamps", {}),
+        }
+
     try:
         pipeline_status[shipment_id] = {"status": "extracting", "progress": 0.2}
 
@@ -74,13 +98,10 @@ def _run_pipeline_background(
             document_paths=file_paths,
             customer_id=customer_id,
             shipment_id=shipment_id,
+            status_callback=status_callback,
         )
 
-        pipeline_status[shipment_id] = {
-            "status": result.get("status", "stored"),
-            "progress": 1.0,
-            "decision": result.get("decision_result", {}).get("decision"),
-        }
+        status_callback(result)
     except Exception as e:
         logger.error(f"Pipeline failed for {shipment_id}: {e}")
         pipeline_status[shipment_id] = {
@@ -186,7 +207,16 @@ async def pipeline_sse(shipment_id: str):
         timeout = 120  # 2 minutes max
         elapsed = 0
         while elapsed < timeout:
-            status = pipeline_status.get(shipment_id, {"status": "unknown"})
+            status = pipeline_status.get(shipment_id)
+            if status is None:
+                checkpoint = get_pipeline_checkpoint(shipment_id)
+                status = {
+                    "status": checkpoint["status"],
+                    "progress": PROGRESS_BY_STATUS.get(checkpoint["status"], 0.0),
+                    "retry_count": checkpoint.get("retry_count", 0),
+                    "error": checkpoint.get("error"),
+                    "timestamps": checkpoint.get("state", {}).get("timestamps", {}),
+                } if checkpoint else {"status": "unknown"}
             if status != last_status:
                 yield {"data": json.dumps(status)}
                 last_status = status.copy()

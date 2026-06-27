@@ -1,1 +1,260 @@
-/Users/cgupta/Documents/GoComet/sample_documents/shipment_metadata.json
+{
+  "shipment_1": {
+    "id": "SHP-2026-001",
+    "route": "India \u2192 United States",
+    "trade": "Textiles",
+    "quality": "clean",
+    "errors": [],
+    "description": "Clean shipment \u2014 all documents correct",
+    "shipper": "Rajesh Textiles Pvt. Ltd.",
+    "consignee": "American Home Furnishings Inc.",
+    "documents": {
+      "bill_of_lading": "shipment_1/bill_of_lading_shipment_1.pdf",
+      "commercial_invoice": "shipment_1/commercial_invoice_shipment_1.pdf",
+      "packing_list": "shipment_1/packing_list_shipment_1.pdf",
+      "certificate_of_origin": "shipment_1/certificate_of_origin_shipment_1.pdf"
+    }
+  },
+  "shipment_2": {
+    "id": "SHP-2026-002",
+    "route": "India \u2192 Germany",
+    "trade": "Wooden Furniture",
+    "quality": "clean",
+    "errors": [
+      "HS code on BOL is 7-digit (9401.69.0) instead of 8-digit (9401.69.00)",
+      "Consignee on Packing List has typo: 'HomeStyle Germany Gmbh' (lowercase b)",
+      "Gross weight on Packing List is 4200 KG but BOL says 4250 KG",
+      "Invoice number missing on Packing List"
+    ],
+    "description": "Clean format, 4 deliberate validation errors",
+    "shipper": "WoodCraft India Pvt. Ltd.",
+    "consignee": "HomeStyle Germany GmbH",
+    "documents": {
+      "bill_of_lading": "shipment_2/bill_of_lading_shipment_2.pdf",
+      "commercial_invoice": "shipment_2/commercial_invoice_shipment_2.pdf",
+      "packing_list": "shipment_2/packing_list_shipment_2.pdf"
+    }
+  },
+  "shipment_3": {
+    "id": "SHP-2026-003",
+    "route": "China \u2192 India",
+    "trade": "Electronics",
+    "quality": "clean",
+    "errors": [
+      "Consignee name differs: BOL says 'TechVista Solutions Pvt Ltd' but Invoice says 'TechVista Solutions Private Limited'",
+      "HS code on Invoice is 8471.30.00 but BOL has 8471.30.10 \u2014 different subheading",
+      "POD on Invoice says 'Nhava Sheva' but BOL says 'Jawaharlal Nehru Port (INNSA)' \u2014 same port, different names"
+    ],
+    "description": "Cross-document inconsistencies between BOL and Invoice",
+    "shipper": "Shenzhen TechPro Electronics Co., Ltd.",
+    "consignee": "TechVista Solutions Pvt Ltd",
+    "documents": {
+      "bill_of_lading": "shipment_3/bill_of_lading_shipment_3.pdf",
+      "commercial_invoice": "shipment_3/commercial_invoice_shipment_3.pdf",
+      "packing_list": "shipment_3/packing_list_shipment_3.pdf"
+    }
+  },
+  "shipment_4": {
+    "id": "SHP-2026-004",
+    "route": "India \u2192 UAE",
+    "trade": "Spices & Food Products",
+    "quality": "degraded",
+    "errors": [
+      "Document is degraded/noisy \u2014 tests low-confidence extraction",
+      "Some fields partially obscured or hard to read"
+    ],
+    "description": "Deliberately degraded scan quality \u2014 tests extraction confidence",
+    "shipper": "Kerala Spice Exports Ltd.",
+    "consignee": "Al Baraka Trading LLC",
+    "documents": {
+      "bill_of_lading": "shipment_4/bill_of_lading_shipment_4.pdf",
+      "commercial_invoice": "shipment_4/commercial_invoice_shipment_4.pdf",
+      "packing_list": "shipment_4/packing_list_shipment_4.pdf",
+      "certificate_of_origin": "shipment_4/certificate_of_origin_shipment_4.pdf",
+      "bill_of_lading_degraded": "shipment_4/bill_of_lading_shipment_4_degraded.pdf",
+      "commercial_invoice_degraded": "shipment_4/commercial_invoice_shipment_4_degraded.pdf",
+      "packing_list_degraded": "shipment_4/packing_list_shipment_4_degraded.pdf",
+      "certificate_of_origin_degraded": "shipment_4/certificate_of_origin_shipment_4_degraded.pdf"
+    }
+  },
+  "shipment_5": {
+    "id": "SHP-2026-005",
+    "route": "Bangladesh \u2192 United Kingdom",
+    "trade": "Ready-Made Garments",
+    "quality": "mixed",
+    "errors": [
+      "HS code on Invoice is 6109.10.00 (cotton T-shirts) but actual product is cotton-polyester blend \u2014 should be 6109.90.00",
+      "Incoterm on BOL says 'FOB Chittagong' but Invoice says 'CIF Felixstowe' \u2014 contradictory",
+      "Weight on COO doesn't match BOL (COO says 3800 KG, BOL says 3950 KG)"
+    ],
+    "description": "HS code classification error + Incoterm contradiction + weight mismatch",
+    "shipper": "Dhaka Garments International Ltd.",
+    "consignee": "BritFashion Retail Group Plc",
+    "documents": {
+      "bill_of_lading": "shipment_5/bill_of_lading_shipment_5.pdf",
+      "commercial_invoice": "shipment_5/commercial_invoice_shipment_5.pdf",
+      "packing_list": "shipment_5/packing_list_shipment_5.pdf",
+      "certificate_of_origin": "shipment_5/certificate_of_origin_shipment_5.pdf"
+    }
+  },
+  "shipment_6": {
+    "id": "SHP-2026-006",
+    "route": "India \u2192 Japan",
+    "trade": "Auto Parts",
+    "quality": "mixed",
+    "errors": [
+      "Consignee abbreviated as 'Yamato Auto Corp.' on BOL but full name 'Yamato Automotive Corporation' on Invoice",
+      "Gross weight field is blank on Packing List (data missing)",
+      "Description of goods is vague on BOL: just 'Automotive Parts & Accessories' without specifics",
+      "No Incoterm specified on Invoice"
+    ],
+    "description": "Partial data, abbreviations, missing fields \u2014 edge case testing",
+    "shipper": "Bharat Auto Components Ltd.",
+    "consignee": "Yamato Auto Corp.",
+    "documents": {
+      "bill_of_lading": "shipment_6/bill_of_lading_shipment_6.pdf",
+      "commercial_invoice": "shipment_6/commercial_invoice_shipment_6.pdf",
+      "packing_list": "shipment_6/packing_list_shipment_6.pdf"
+    }
+  },
+  "shipment_7": {
+    "id": "SHP-2026-007",
+    "route": "India \u2192 UAE",
+    "trade": "Reliance Clean",
+    "quality": "clean",
+    "errors": [],
+    "description": "Clean synthetic shipment from Reliance Global",
+    "shipper": "Reliance Global Exports Pvt. Ltd.",
+    "consignee": "Al-Futtaim Trading LLC",
+    "documents": {
+      "bill_of_lading": "shipment_7/bill_of_lading.pdf",
+      "commercial_invoice": "shipment_7/commercial_invoice.pdf",
+      "packing_list": "shipment_7/packing_list.pdf",
+      "certificate_of_origin": "shipment_7/certificate_of_origin.pdf"
+    }
+  },
+  "shipment_8": {
+    "id": "SHP-2026-008",
+    "route": "India \u2192 UAE",
+    "trade": "Reliance Mismatch",
+    "quality": "mismatch",
+    "errors": [
+      "Contains deliberate mismatch errors"
+    ],
+    "description": "Mismatched synthetic shipment from Reliance Global",
+    "shipper": "Reliance Global Exports Pvt. Ltd.",
+    "consignee": "Al-Futtaim Trading LLC",
+    "documents": {
+      "bill_of_lading": "shipment_8/bill_of_lading.pdf",
+      "commercial_invoice": "shipment_8/commercial_invoice.pdf",
+      "packing_list": "shipment_8/packing_list.pdf",
+      "certificate_of_origin": "shipment_8/certificate_of_origin.pdf"
+    }
+  },
+  "shipment_9": {
+    "id": "SHP-2026-009",
+    "route": "India \u2192 UAE",
+    "trade": "Reliance Messy (Fax)",
+    "quality": "messy",
+    "errors": [
+      "Documents simulate a noisy fax scan"
+    ],
+    "description": "Fax-degraded synthetic shipment from Reliance Global",
+    "shipper": "Reliance Global Exports Pvt. Ltd.",
+    "consignee": "Al-Futtaim Trading LLC",
+    "documents": {
+      "bill_of_lading": "shipment_9/bill_of_lading_fax.pdf",
+      "commercial_invoice": "shipment_9/commercial_invoice_fax.pdf",
+      "packing_list": "shipment_9/packing_list_fax.pdf",
+      "certificate_of_origin": "shipment_9/certificate_of_origin_fax.pdf"
+    }
+  },
+  "shipment_10": {
+    "id": "SHP-2026-010",
+    "route": "India \u2192 UK",
+    "trade": "Tata Clean",
+    "quality": "clean",
+    "errors": [],
+    "description": "Clean synthetic shipment from Tata International",
+    "shipper": "Tata International Ltd.",
+    "consignee": "London Supply Chain Partners",
+    "documents": {
+      "bill_of_lading": "shipment_10/bill_of_lading.pdf",
+      "commercial_invoice": "shipment_10/commercial_invoice.pdf",
+      "packing_list": "shipment_10/packing_list.pdf",
+      "certificate_of_origin": "shipment_10/certificate_of_origin.pdf"
+    }
+  },
+  "shipment_11": {
+    "id": "SHP-2026-011",
+    "route": "India \u2192 UK",
+    "trade": "Tata Mismatch",
+    "quality": "mismatch",
+    "errors": [
+      "Contains deliberate mismatch errors"
+    ],
+    "description": "Mismatched synthetic shipment from Tata International",
+    "shipper": "Tata International Ltd.",
+    "consignee": "London Supply Chain Partners",
+    "documents": {
+      "bill_of_lading": "shipment_11/bill_of_lading.pdf",
+      "commercial_invoice": "shipment_11/commercial_invoice.pdf",
+      "packing_list": "shipment_11/packing_list.pdf",
+      "certificate_of_origin": "shipment_11/certificate_of_origin.pdf"
+    }
+  },
+  "shipment_12": {
+    "id": "SHP-2026-012",
+    "route": "India \u2192 UK",
+    "trade": "Tata Messy (Fax)",
+    "quality": "messy",
+    "errors": [
+      "Documents simulate a noisy fax scan"
+    ],
+    "description": "Fax-degraded synthetic shipment from Tata International",
+    "shipper": "Tata International Ltd.",
+    "consignee": "London Supply Chain Partners",
+    "documents": {
+      "bill_of_lading": "shipment_12/bill_of_lading_fax.pdf",
+      "commercial_invoice": "shipment_12/commercial_invoice_fax.pdf",
+      "packing_list": "shipment_12/packing_list_fax.pdf",
+      "certificate_of_origin": "shipment_12/certificate_of_origin_fax.pdf"
+    }
+  },
+  "shipment_13": {
+    "id": "SHP-2026-013",
+    "route": "India \u2192 UAE",
+    "trade": "Reliance Messy (Blurry)",
+    "quality": "messy",
+    "errors": [
+      "Documents simulate a blurry scan"
+    ],
+    "description": "Blurry synthetic shipment from Reliance Global",
+    "shipper": "Reliance Global Exports Pvt. Ltd.",
+    "consignee": "Al-Futtaim Trading LLC",
+    "documents": {
+      "bill_of_lading": "shipment_13/bill_of_lading_blurry.pdf",
+      "commercial_invoice": "shipment_13/commercial_invoice_blurry.pdf",
+      "packing_list": "shipment_13/packing_list_blurry.pdf",
+      "certificate_of_origin": "shipment_13/certificate_of_origin_blurry.pdf"
+    }
+  },
+  "shipment_14": {
+    "id": "SHP-2026-014",
+    "route": "India \u2192 UK",
+    "trade": "Tata Messy (Blurry)",
+    "quality": "messy",
+    "errors": [
+      "Documents simulate a blurry scan"
+    ],
+    "description": "Blurry synthetic shipment from Tata International",
+    "shipper": "Tata International Ltd.",
+    "consignee": "London Supply Chain Partners",
+    "documents": {
+      "bill_of_lading": "shipment_14/bill_of_lading_blurry.pdf",
+      "commercial_invoice": "shipment_14/commercial_invoice_blurry.pdf",
+      "packing_list": "shipment_14/packing_list_blurry.pdf",
+      "certificate_of_origin": "shipment_14/certificate_of_origin_blurry.pdf"
+    }
+  }
+}

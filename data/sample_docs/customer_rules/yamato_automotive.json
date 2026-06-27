@@ -1,0 +1,38 @@
+{
+  "customer_name": "Yamato Automotive Corporation",
+  "applies_to": "shipment_6",
+  "rules": {
+    "consignee_name": {
+      "match_type": "exact",
+      "expected": "Yamato Automotive Corporation",
+      "case_sensitive": true
+    },
+    "hs_code_format": {
+      "match_type": "format",
+      "pattern": "####.##.##",
+      "digits": 8
+    },
+    "incoterm_present": {
+      "match_type": "present_on_all",
+      "field": "incoterm"
+    },
+    "description_specific": {
+      "match_type": "detailed",
+      "note": "BOL must contain specific product descriptions, not generic categories"
+    },
+    "weight_present": {
+      "match_type": "present_on_all",
+      "field": "gross_weight"
+    },
+    "all_fields_complete": {
+      "match_type": "no_blanks",
+      "critical_fields": [
+        "consignee",
+        "hs_code",
+        "weight",
+        "incoterm",
+        "description"
+      ]
+    }
+  }
+}

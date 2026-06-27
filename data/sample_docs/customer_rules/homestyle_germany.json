@@ -1,0 +1,32 @@
+{
+  "customer_name": "HomeStyle Germany GmbH",
+  "applies_to": "shipment_2",
+  "rules": {
+    "consignee_name": {
+      "match_type": "exact",
+      "expected": "HomeStyle Germany GmbH",
+      "case_sensitive": true
+    },
+    "hs_code_format": {
+      "match_type": "format",
+      "pattern": "####.##.##",
+      "digits": 8
+    },
+    "incoterm": {
+      "match_type": "exact",
+      "expected": "CIF Hamburg"
+    },
+    "weight_cross_doc": {
+      "match_type": "cross_document_consistent",
+      "tolerance_pct": 0.5
+    },
+    "invoice_on_all_docs": {
+      "match_type": "present_on_all",
+      "field": "invoice_number"
+    },
+    "payment_terms": {
+      "match_type": "exact",
+      "expected": "Irrevocable LC at sight"
+    }
+  }
+}

@@ -112,6 +112,8 @@ class ExtractionResult(BaseModel):
     processing_time_ms: int = 0
     model_used: str = ""
     tokens_used: Optional[int] = None
+    document_quality_score: float = 1.0
+    document_quality_reasoning: str = "Clear and readable"
     extraction_timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -126,6 +128,7 @@ class Severity(str, Enum):
 
 class FieldValidation(BaseModel):
     field_name: str
+    document_type: str = "unknown"
     found_value: Optional[str] = None
     expected_value: Optional[str] = None
     result: str  # "match" | "mismatch" | "uncertain"

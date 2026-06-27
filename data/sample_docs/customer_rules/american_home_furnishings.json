@@ -1,0 +1,32 @@
+{
+  "customer_name": "American Home Furnishings Inc.",
+  "applies_to": "shipment_1",
+  "rules": {
+    "consignee_name": {
+      "match_type": "exact",
+      "expected": "American Home Furnishings Inc.",
+      "case_sensitive": false
+    },
+    "hs_code_format": {
+      "match_type": "format",
+      "pattern": "####.##.##",
+      "digits": 8
+    },
+    "incoterm": {
+      "match_type": "exact",
+      "expected": "FOB Nhava Sheva"
+    },
+    "weight_cross_doc": {
+      "match_type": "cross_document_consistent",
+      "tolerance_pct": 1.0
+    },
+    "invoice_on_all_docs": {
+      "match_type": "present_on_all",
+      "field": "invoice_number"
+    },
+    "country_of_origin": {
+      "match_type": "exact",
+      "expected": "India"
+    }
+  }
+}

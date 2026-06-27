@@ -16,27 +16,23 @@ from backend.models.schemas import (
     DecisionResult,
     ValidationResult,
 )
+from backend.prompts.loader import load_prompt
 
 logger = logging.getLogger(__name__)
 
 client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+AMENDMENT_PROMPT = load_prompt("router_amendment.md")
 
 
-def make_decision(validation: ValidationResult) -> tuple[str, list[str]]:
-    """Deterministic decision based on validation results.
+def make_decision(
+    validation: ValidationResult,
+    low_quality_docs: list[dict] | None = None
+) -> tuple[str, list[str]]:
+    """Deterministic decision based on validation results and document quality."""
+    if low_quality_docs:
+        return "amendment_required", []
 
-    Priority order:
-    1. Any CRITICAL mismatch -> amendment_required
-    2. Any HIGH mismatch -> flagged
-    3. Any uncertain field -> flagged
-    4. Any field with extraction confidence < threshold -> flagged
-    5. Only MEDIUM/LOW mismatches -> approved (with note)
-    6. All match -> approved
-
-    Returns: (decision, list_of_flagged_field_names)
-    """
     flagged_fields = []
-
     has_critical = False
     has_high = False
     has_uncertain = False
@@ -68,9 +64,16 @@ def generate_reasoning(
     decision: str,
     validation: ValidationResult,
     cross_doc: CrossDocValidationResult | None = None,
+    low_quality_docs: list[dict] | None = None,
 ) -> str:
     """Build human-readable reasoning for the decision."""
     parts = []
+
+    if low_quality_docs:
+        parts.append(f"AMENDMENT REQUIRED: {len(low_quality_docs)} document(s) failed visual quality assessment.")
+        for doc in low_quality_docs:
+            parts.append(f"  - {doc['file_name']}: Score {doc['score']} - {doc['reasoning']}")
+        return "\n".join(parts)
 
     if decision == "approved":
         matches = sum(1 for v in validation.field_validations if v.result == "match")
@@ -87,7 +90,7 @@ def generate_reasoning(
         high = [v for v in validation.field_validations if v.result == "mismatch" and v.severity == "high"]
         parts.append(f"AMENDMENT REQUIRED: {len(critical)} critical and {len(high)} high-severity issue(s) found.")
         for v in critical + high:
-            parts.append(f"  - {v.field_name} ({v.severity.upper()}): found '{v.found_value}', expected '{v.expected_value}'")
+            parts.append(f"  - {v.field_name} in {v.document_type} ({v.severity.upper()}): found '{v.found_value}', expected '{v.expected_value}'")
             if v.reasoning:
                 parts.append(f"    Reason: {v.reasoning}")
 
@@ -96,9 +99,9 @@ def generate_reasoning(
         high = [v for v in validation.field_validations if v.result == "mismatch" and v.severity == "high"]
         parts.append(f"FLAGGED FOR REVIEW: {len(uncertain)} uncertain field(s), {len(high)} high-severity mismatch(es).")
         for v in uncertain:
-            parts.append(f"  - {v.field_name}: extraction confidence {v.extraction_confidence:.2f}. Human verification required.")
+            parts.append(f"  - {v.field_name} in {v.document_type}: extraction confidence {v.extraction_confidence:.2f}. Human verification required.")
         for v in high:
-            parts.append(f"  - {v.field_name} (HIGH): found '{v.found_value}', expected '{v.expected_value}'")
+            parts.append(f"  - {v.field_name} in {v.document_type} (HIGH): found '{v.found_value}', expected '{v.expected_value}'")
 
     # Add cross-document issues if present
     if cross_doc and cross_doc.has_cross_doc_issues:
@@ -118,14 +121,27 @@ def draft_amendment_email(
     customer_name: str,
     shipment_id: str,
     cross_doc: CrossDocValidationResult | None = None,
+    low_quality_docs: list[dict] | None = None,
 ) -> str:
     """Generate a professional amendment request email using Claude Sonnet."""
     # Build discrepancy list
     discrepancies = []
+    
+    if low_quality_docs:
+        for doc in low_quality_docs:
+            discrepancies.append({
+                "field": f"Document Quality ({doc['file_name']})",
+                "found": f"Unreadable/Blurry (Score: {doc['score']}) - {doc['reasoning']}",
+                "expected": "Clear and legible scan",
+                "severity": "CRITICAL",
+                "type": "unreadable document"
+            })
+            
     for v in validation.field_validations:
         if v.result in ("mismatch", "uncertain"):
+            doc_name = v.document_type.replace("_", " ").title() if v.document_type else "Document"
             discrepancies.append({
-                "field": v.field_name.replace("_", " ").title(),
+                "field": f"{v.field_name.replace('_', ' ').title()} (in {doc_name})",
                 "found": v.found_value or "Not found",
                 "expected": v.expected_value or "N/A",
                 "severity": v.severity.upper(),
@@ -154,30 +170,18 @@ def draft_amendment_email(
         for d in discrepancies
     )
 
-    prompt = f"""Draft a professional amendment request email from a Cargo Control Group (CG) to a Shipping Unit (SU).
-
-Context:
-- Customer: {customer_name}
-- Shipment Reference: {shipment_id}
-- Number of issues found: {len(discrepancies)}
-
-Discrepancies found:
-{discrepancy_text}
-
-Requirements:
-1. Professional, clear, and actionable tone
-2. List every discrepancy with field name, found value, and expected value
-3. Request corrected documents be resubmitted
-4. Be ready to send with minimal edits
-5. Do NOT include [placeholder] brackets — use the actual values provided
-6. Keep it concise — under 300 words
-
-Generate the complete email including Subject line."""
+    prompt = AMENDMENT_PROMPT.format(
+        customer_name=customer_name,
+        shipment_id=shipment_id,
+        issue_count=len(discrepancies),
+        discrepancy_text=discrepancy_text,
+    )
 
     try:
         response = client.messages.create(
             model=settings.routing_model,
             max_tokens=1024,
+            temperature=settings.routing_temperature,
             messages=[{"role": "user", "content": prompt}],
         )
         return response.content[0].text.strip()
@@ -230,6 +234,7 @@ def route_and_draft(
     customer_name: str,
     shipment_id: str,
     cross_doc: CrossDocValidationResult | None = None,
+    low_quality_docs: list[dict] | None = None,
 ) -> DecisionResult:
     """Make routing decision and generate appropriate email draft.
 
@@ -238,7 +243,7 @@ def route_and_draft(
     start_time = time.time()
 
     # Deterministic decision
-    decision, flagged_fields = make_decision(validation)
+    decision, flagged_fields = make_decision(validation, low_quality_docs)
 
     # Factor in cross-doc issues
     if cross_doc and cross_doc.has_cross_doc_issues:
@@ -252,14 +257,14 @@ def route_and_draft(
                 flagged_fields.append(f.field_name)
 
     # Generate reasoning
-    reasoning = generate_reasoning(decision, validation, cross_doc)
+    reasoning = generate_reasoning(decision, validation, cross_doc, low_quality_docs)
 
     # Generate email draft
     draft_email = None
     model_used = None
 
     if decision == "amendment_required":
-        draft_email = draft_amendment_email(validation, customer_name, shipment_id, cross_doc)
+        draft_email = draft_amendment_email(validation, customer_name, shipment_id, cross_doc, low_quality_docs)
         model_used = settings.routing_model
     elif decision == "approved":
         field_count = len(validation.field_validations)

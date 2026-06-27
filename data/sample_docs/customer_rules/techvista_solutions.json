@@ -1,0 +1,32 @@
+{
+  "customer_name": "TechVista Solutions Pvt Ltd",
+  "applies_to": "shipment_3",
+  "rules": {
+    "consignee_name": {
+      "match_type": "exact",
+      "expected": "TechVista Solutions Pvt Ltd",
+      "case_sensitive": true
+    },
+    "hs_code_format": {
+      "match_type": "format",
+      "pattern": "####.##.##",
+      "digits": 8
+    },
+    "hs_code_cross_doc": {
+      "match_type": "cross_document_consistent"
+    },
+    "incoterm": {
+      "match_type": "exact",
+      "expected": "CIF Nhava Sheva"
+    },
+    "pod_name": {
+      "match_type": "semantic",
+      "expected": "Jawaharlal Nehru Port (INNSA), India",
+      "acceptable_variants": [
+        "Nhava Sheva",
+        "JNPT",
+        "INNSA"
+      ]
+    }
+  }
+}

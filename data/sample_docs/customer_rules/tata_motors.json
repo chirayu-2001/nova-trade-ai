@@ -1,0 +1,19 @@
+{
+  "customer_name": "London Supply Chain Partners",
+  "applies_to": "shipment_10, shipment_11, shipment_12",
+  "rules": {
+    "consignee_name": {
+      "match_type": "exact",
+      "expected": "London Supply Chain Partners",
+      "case_sensitive": false
+    },
+    "invoice_on_all_docs": {
+      "match_type": "present_on_all",
+      "field": "invoice_number"
+    },
+    "incoterms": {
+      "match_type": "exact",
+      "expected": "FOB Mundra"
+    }
+  }
+}

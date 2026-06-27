@@ -1,0 +1,33 @@
+{
+  "customer_name": "BritFashion Retail Group Plc",
+  "applies_to": "shipment_5",
+  "rules": {
+    "consignee_name": {
+      "match_type": "exact",
+      "expected": "BritFashion Retail Group Plc",
+      "case_sensitive": true
+    },
+    "hs_code_format": {
+      "match_type": "format",
+      "pattern": "####.##.##",
+      "digits": 8
+    },
+    "hs_code_accuracy": {
+      "match_type": "product_match",
+      "note": "HS code must match actual fabric composition"
+    },
+    "incoterm_consistency": {
+      "match_type": "cross_document_consistent",
+      "field": "incoterm"
+    },
+    "weight_cross_doc": {
+      "match_type": "cross_document_consistent",
+      "tolerance_pct": 1.0
+    },
+    "gsp_origin": {
+      "match_type": "exact",
+      "expected": "Bangladesh",
+      "note": "Required for GSP duty preference"
+    }
+  }
+}

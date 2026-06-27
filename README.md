@@ -16,14 +16,14 @@ nano .env
 
 ```bash
 source .venv/bin/activate
-cd /Users/cgupta/Documents/GoComet/gocomet-nova
+# From the project root:
 PYTHONPATH=. uvicorn backend.main:app --reload --port 8000
 ```
 
 ### 3. Start the frontend
 
 ```bash
-cd /Users/cgupta/Documents/GoComet/gocomet-nova/frontend
+cd frontend
 npm run dev
 ```
 
@@ -32,7 +32,7 @@ Open http://localhost:5173
 ## Architecture
 
 ```
-PDF Upload → Extractor Agent (Claude Sonnet) → Validator Agent (Rules + Haiku) → Router Agent (Decision + Email Draft) → SQLite Storage → NL Query (Haiku)
+PDF Upload → Extractor Agent (Claude 3.5 Sonnet) → Validator Agent (Rules + Claude) → Router Agent (Decision + Email Draft) → SQLite Storage → NL Query (Claude)
 ```
 
 ## Sample Shipments

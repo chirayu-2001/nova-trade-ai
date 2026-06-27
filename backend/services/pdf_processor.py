@@ -79,6 +79,18 @@ def detect_document_type(pdf_path: str) -> str:
         return "certificate_of_origin"
     elif "BILL OF LADING" in text or "B/L" in text:
         return "bill_of_lading"
+        
+    # Last resort fallback: check filename (for image-based PDFs with no text)
+    filename = os.path.basename(pdf_path).lower()
+    if "commercial_invoice" in filename or "invoice" in filename:
+        return "commercial_invoice"
+    elif "packing_list" in filename:
+        return "packing_list"
+    elif "certificate_of_origin" in filename:
+        return "certificate_of_origin"
+    elif "bill_of_lading" in filename or "b_l" in filename:
+        return "bill_of_lading"
+
     return "unknown"
 
 

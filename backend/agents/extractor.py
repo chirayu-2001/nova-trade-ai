@@ -17,6 +17,7 @@ from backend.models.schemas import (
     ExtractionResult,
     ExtractedField,
 )
+from backend.prompts.loader import load_prompt
 from backend.services.ocr_verifier import verify_extraction
 from backend.services.pdf_processor import (
     detect_document_type,
@@ -28,24 +29,7 @@ from backend.services.pdf_processor import (
 logger = logging.getLogger(__name__)
 
 client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-
-EXTRACTION_SYSTEM_PROMPT = """You are a trade document extraction specialist. You extract structured data from trade documents (Bills of Lading, Commercial Invoices, Packing Lists, Certificates of Origin) with high accuracy.
-
-CRITICAL RULES:
-1. Only extract values that are EXPLICITLY visible in the document. Never guess or infer.
-2. If a field is not present in the document, set value to null and confidence to 0.0.
-3. For each field, quote the EXACT text snippet from the document where you found the value in the source_snippet field.
-4. Rate your confidence 0.0-1.0 for each field:
-   - 0.9-1.0 = clearly printed, unambiguous, easy to read
-   - 0.7-0.89 = readable but some ambiguity (small font, partial occlusion)
-   - 0.4-0.69 = hard to read, partially guessing from context
-   - 0.0-0.39 = very uncertain or not found
-5. For tabular data, pay attention to column headers and row alignment.
-6. For weights, include the unit (KG, MT, LBS).
-7. For HS codes, extract the full code including all digits and dots.
-8. For Incoterms, include the location if specified (e.g., "FOB Shanghai", "CIF Hamburg").
-
-Return ONLY valid JSON matching the schema provided. No markdown, no explanation, just the JSON object."""
+EXTRACTION_SYSTEM_PROMPT = load_prompt("extraction_system.md")
 
 
 def _build_field_schema(doc_type: str) -> str:
@@ -64,6 +48,9 @@ def _build_field_schema(doc_type: str) -> str:
             "source_snippet": "exact text from document or null",
             "page_number": "int or null",
         }
+        
+    fields["document_quality_score"] = "float 0.0-1.0"
+    fields["document_quality_reasoning"] = "string"
 
     return json.dumps(fields, indent=2)
 
@@ -142,14 +129,10 @@ def extract_document(
     doc_id = str(uuid.uuid4())[:8]
     field_schema = _build_field_schema(document_type)
 
-    user_prompt = f"""You are extracting a {document_type.replace('_', ' ').title()}.
-
-Extract ALL of the following fields from this document. Return a JSON object where each key is a field name and each value is an object with "value", "confidence", "source_snippet", and "page_number".
-
-Fields to extract:
-{field_schema}
-
-Return ONLY the JSON object. No markdown formatting."""
+    user_prompt = load_prompt("extraction_user.md").format(
+        document_type=document_type.replace("_", " ").title(),
+        field_schema=field_schema,
+    )
 
     # Try native PDF first, fall back to image
     extraction_response = None
@@ -165,6 +148,7 @@ Return ONLY the JSON object. No markdown formatting."""
                 response = client.messages.create(
                     model=model_used,
                     max_tokens=4096,
+                    temperature=settings.extraction_temperature,
                     messages=[{
                         "role": "user",
                         "content": [
@@ -200,6 +184,7 @@ Return ONLY the JSON object. No markdown formatting."""
                 response = client.messages.create(
                     model=model_used,
                     max_tokens=4096,
+                    temperature=settings.extraction_temperature,
                     messages=[{"role": "user", "content": image_content}],
                     system=EXTRACTION_SYSTEM_PROMPT,
                 )
@@ -215,9 +200,17 @@ Return ONLY the JSON object. No markdown formatting."""
                 logger.error(f"All extraction attempts failed for {pdf_path}")
 
     # Parse the response into our schema
+    quality_score = 1.0
+    quality_reasoning = "Clear and readable"
+    
     if extraction_response:
         try:
             parsed = _parse_extraction_response(extraction_response, document_type)
+            
+            # Extract quality metrics
+            quality_score = float(parsed.pop("document_quality_score", 1.0))
+            quality_reasoning = parsed.pop("document_quality_reasoning", "Clear and readable")
+            
             # Build the Pydantic model from parsed fields
             field_data = {}
             for field_name in model_class.model_fields:
@@ -252,6 +245,8 @@ Return ONLY the JSON object. No markdown formatting."""
         processing_time_ms=processing_time,
         model_used=model_used,
         tokens_used=tokens_used,
+        document_quality_score=quality_score,
+        document_quality_reasoning=quality_reasoning,
     )
 
     # OCR hallucination verification
