@@ -45,15 +45,35 @@ def extract_node(state: PipelineState) -> dict:
     document_paths = state["document_paths"]
     document_types = state.get("document_types", [])
 
+    import asyncio
+    from backend.agents.extractor import extract_document_async
+
+    async def _extract_all():
+        tasks = []
+        for i, path in enumerate(document_paths):
+            doc_type = document_types[i] if i < len(document_types) else "auto"
+            tasks.append(extract_document_async(path, document_type=doc_type))
+        return await asyncio.gather(*tasks, return_exceptions=True)
+
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+    if loop.is_running():
+        import nest_asyncio
+        nest_asyncio.apply()
+
+    gathered_results = asyncio.run(_extract_all())
+
     results = []
-    for i, path in enumerate(document_paths):
-        doc_type = document_types[i] if i < len(document_types) else "auto"
-        try:
-            result = extract_document(path, document_type=doc_type)
+    for path, result in zip(document_paths, gathered_results):
+        if isinstance(result, Exception):
+            logger.error(f"Extraction failed for {path}: {result}")
+            results.append({"error": str(result), "document_path": path})
+        else:
             results.append(result.model_dump(mode="json"))
-        except Exception as e:
-            logger.error(f"Extraction failed for {path}: {e}")
-            results.append({"error": str(e), "document_path": path})
 
     timestamps["extraction_completed"] = _now()
 

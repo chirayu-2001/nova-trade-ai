@@ -10,7 +10,7 @@ import time
 import uuid
 import os
 
-from litellm import completion
+from litellm import completion, acompletion
 
 from backend.config.settings import settings
 from backend.models.schemas import (
@@ -104,7 +104,7 @@ def _parse_extraction_response(response_text: str, doc_type: str) -> dict:
     raise json.JSONDecodeError("Could not parse LLM response as JSON", text, 0)
 
 
-def extract_document(
+async def extract_document_async(
     pdf_path: str,
     document_type: str = "auto",
     run_ocr_verification: bool = True,
@@ -182,7 +182,7 @@ def extract_document(
                     {"role": "user", "content": content}
                 ]
                 
-                response = completion(
+                response = await acompletion(
                     model=model_used,
                     max_tokens=4096,
                     temperature=settings.extraction_temperature,
@@ -206,7 +206,7 @@ def extract_document(
                     {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
                     {"role": "user", "content": image_content}
                 ]
-                response = completion(
+                response = await acompletion(
                     model=model_used,
                     max_tokens=4096,
                     temperature=settings.extraction_temperature,
@@ -278,3 +278,30 @@ def extract_document(
         result = verify_extraction(result, pdf_path)
 
     return result
+
+def extract_document(
+    pdf_path: str,
+    document_type: str = "auto",
+    run_ocr_verification: bool = True,
+) -> ExtractionResult:
+    """Synchronous wrapper for extract_document_async."""
+    import asyncio
+    
+    # Try to get existing event loop
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+    if loop.is_running():
+        # If loop is already running, we can't use run_until_complete directly in the same thread
+        # This typically happens if this is called within an existing async context.
+        # Ideally, async code should call extract_document_async directly.
+        import nest_asyncio
+        nest_asyncio.apply()
+        
+    return asyncio.run(
+        extract_document_async(pdf_path, document_type, run_ocr_verification)
+    )
+
