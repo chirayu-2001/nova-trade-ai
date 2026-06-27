@@ -261,25 +261,10 @@ def route_node(state: PipelineState) -> dict:
         }
 
     # Aggregate: combine all validation results
-    field_to_vals = {}
+    combined_validations = []
     for v_dict in valid_validations:
         v = ValidationResult.model_validate(v_dict)
-        for fv in v.field_validations:
-            field_to_vals.setdefault(fv.field_name, []).append(fv)
-            
-    combined_validations = []
-    for field_name, fvs in field_to_vals.items():
-        def severity_score(fv):
-            if fv.result == "match": return 0
-            if fv.result == "uncertain": return 1
-            if fv.severity == "low": return 2
-            if fv.severity == "medium": return 3
-            if fv.severity == "high": return 4
-            if fv.severity == "critical": return 5
-            return 0
-            
-        worst_fv = max(fvs, key=severity_score)
-        combined_validations.append(worst_fv)
+        combined_validations.extend(v.field_validations)
 
     # Recompute summary stats
     critical = sum(1 for v in combined_validations if v.result == "mismatch" and v.severity == "critical")

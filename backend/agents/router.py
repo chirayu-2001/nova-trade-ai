@@ -27,6 +27,7 @@ if settings.anthropic_api_key:
 if settings.openai_api_key:
     os.environ["OPENAI_API_KEY"] = settings.openai_api_key
 AMENDMENT_PROMPT = load_prompt("router_amendment.md")
+DECISION_PROMPT = load_prompt("router_decision.md")
 
 
 def make_decision(
@@ -93,11 +94,20 @@ def generate_reasoning(
     elif decision == "amendment_required":
         critical = [v for v in validation.field_validations if v.result == "mismatch" and v.severity == "critical"]
         high = [v for v in validation.field_validations if v.result == "mismatch" and v.severity == "high"]
+        uncertain = [v for v in validation.field_validations if v.result == "uncertain"]
+        
         parts.append(f"AMENDMENT REQUIRED: {len(critical)} critical and {len(high)} high-severity issue(s) found.")
         for v in critical + high:
             parts.append(f"  - {v.field_name} in {v.document_type} ({v.severity.upper()}): found '{v.found_value}', expected '{v.expected_value}'")
             if v.reasoning:
                 parts.append(f"    Reason: {v.reasoning}")
+                
+        if uncertain:
+            parts.append(f"\nUNCERTAIN FIELDS (Low Confidence / Flagged for Review):")
+            for v in uncertain:
+                parts.append(f"  - {v.field_name} in {v.document_type}: extraction confidence {v.extraction_confidence:.2f}")
+                if v.reasoning:
+                    parts.append(f"    Reason: {v.reasoning}")
 
     elif decision == "flagged":
         uncertain = [v for v in validation.field_validations if v.result == "uncertain"]
@@ -246,27 +256,84 @@ def route_and_draft(
     Returns complete DecisionResult with decision, reasoning, and email draft.
     """
     start_time = time.time()
+    model_used = None
 
-    # Deterministic decision
-    decision, flagged_fields = make_decision(validation, low_quality_docs)
-
-    # Factor in cross-doc issues
+    # Format inputs for LLM
+    prompt_context = f"""
+<field_validations>
+{json.dumps([v.model_dump(mode="json") for v in validation.field_validations], indent=2)}
+</field_validations>
+"""
     if cross_doc and cross_doc.has_cross_doc_issues:
-        critical_cross = any(f.severity == "critical" for f in cross_doc.field_results if f.status == "mismatch")
-        if critical_cross:
-            decision = "amendment_required"
-        elif decision == "approved":
-            decision = "flagged"
-        for f in cross_doc.field_results:
-            if f.status == "mismatch" and f.field_name not in flagged_fields:
-                flagged_fields.append(f.field_name)
+        prompt_context += f"""
+<cross_doc_validations>
+{json.dumps([f.model_dump(mode="json") for f in cross_doc.field_results], indent=2)}
+</cross_doc_validations>
+"""
+    if low_quality_docs:
+        prompt_context += f"""
+<low_quality_docs>
+{json.dumps(low_quality_docs, indent=2)}
+</low_quality_docs>
+"""
 
-    # Generate reasoning
-    reasoning = generate_reasoning(decision, validation, cross_doc, low_quality_docs)
+    prompt = DECISION_PROMPT + "\n\n" + prompt_context
+
+    llm_decision = None
+    try:
+        response = completion(
+            model=settings.routing_model,
+            max_tokens=4096,
+            temperature=0.0,
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"}
+        )
+        content = response.choices[0].message.content.strip()
+        
+        # Strip potential markdown code blocks
+        if content.startswith("```json"):
+            content = content[7:]
+        elif content.startswith("```"):
+            content = content[3:]
+        if content.endswith("```"):
+            content = content[:-3]
+        content = content.strip()
+        
+        # strict=False allows literal newlines in strings, which LLMs sometimes output
+        try:
+            llm_decision = json.loads(content, strict=False)
+        except Exception as e:
+            logger.error(f"RAW LLM CONTENT THAT FAILED TO PARSE:\n---\n{content}\n---")
+            raise e
+        model_used = settings.routing_model
+    except Exception as e:
+        logger.error(f"LLM decision making failed: {e}. Falling back to Python deterministic logic.")
+
+    if llm_decision and "decision" in llm_decision and "reasoning" in llm_decision and "flagged_fields" in llm_decision:
+        decision = llm_decision["decision"]
+        reasoning = llm_decision["reasoning"]
+        flagged_fields = llm_decision["flagged_fields"]
+    else:
+        logger.info("Using Python deterministic logic for routing decision.")
+        # Fallback deterministic decision
+        decision, flagged_fields = make_decision(validation, low_quality_docs)
+    
+        # Factor in cross-doc issues
+        if cross_doc and cross_doc.has_cross_doc_issues:
+            critical_cross = any(f.severity == "critical" for f in cross_doc.field_results if f.status == "mismatch")
+            if critical_cross:
+                decision = "amendment_required"
+            elif decision == "approved":
+                decision = "flagged"
+            for f in cross_doc.field_results:
+                if f.status == "mismatch" and f.field_name not in flagged_fields:
+                    flagged_fields.append(f.field_name)
+    
+        # Generate reasoning
+        reasoning = generate_reasoning(decision, validation, cross_doc, low_quality_docs)
 
     # Generate email draft
     draft_email = None
-    model_used = None
 
     if decision == "amendment_required":
         draft_email = draft_amendment_email(validation, customer_name, shipment_id, cross_doc, low_quality_docs)
