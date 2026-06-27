@@ -352,6 +352,16 @@ def get_shipment_detail(shipment_id: str) -> Optional[dict]:
     return result
 
 
+def get_document_file_path(document_id: str) -> Optional[dict]:
+    """Return the stored file path and name for a single document."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT file_path, file_name FROM documents WHERE id = ?", (document_id,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 def update_shipment_status(shipment_id: str, status: str, **kwargs):
     """Update shipment status and optional fields."""
     conn = get_connection()

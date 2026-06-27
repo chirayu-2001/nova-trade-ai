@@ -7,8 +7,9 @@ Email drafting uses Claude Sonnet for professional quality.
 import json
 import logging
 import time
+import os
 
-import anthropic
+from litellm import completion
 
 from backend.config.settings import settings
 from backend.models.schemas import (
@@ -20,7 +21,11 @@ from backend.prompts.loader import load_prompt
 
 logger = logging.getLogger(__name__)
 
-client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+# Ensure API keys are set in environment for litellm
+if settings.anthropic_api_key:
+    os.environ["ANTHROPIC_API_KEY"] = settings.anthropic_api_key
+if settings.openai_api_key:
+    os.environ["OPENAI_API_KEY"] = settings.openai_api_key
 AMENDMENT_PROMPT = load_prompt("router_amendment.md")
 
 
@@ -178,13 +183,13 @@ def draft_amendment_email(
     )
 
     try:
-        response = client.messages.create(
+        response = completion(
             model=settings.routing_model,
             max_tokens=1024,
             temperature=settings.routing_temperature,
             messages=[{"role": "user", "content": prompt}],
         )
-        return response.content[0].text.strip()
+        return response.choices[0].message.content.strip()
     except Exception as e:
         logger.error(f"Email drafting failed: {e}")
         # Fallback template

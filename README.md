@@ -1,6 +1,6 @@
 # GoComet Nova — Trade Document AI Validation System
 
-Nova is an AI-native logistics platform built for the GoComet Full-Stack AI Engineer Day Assignment. It acts as an orchestration layer to autonomously validate inbound trade documents (Bills of Lading, Commercial Invoices, Packing Lists), cross-reference them against deterministic customer rules, flag discrepancies, and draft supplier amendment requests.
+Nova is an AI-native logistics platform built for the GoComet Full-Stack AI Engineer Day Assignment. It acts as an orchestration layer to autonomously validate inbound trade documents (Bills of Lading, Commercial Invoices, Packing Lists), cross-reference them against customer rules (using a combination of deterministic and non-deterministic methods), flag discrepancies, and draft supplier amendment requests.
 
 ## 🚀 Quick Start & Setup Instructions
 
@@ -64,7 +64,7 @@ The system utilizes a Multi-Agent architecture orchestrated via **LangGraph** to
 ```
 Trigger / PDF Upload 
   ↳ Extractor Agent (Claude 3.5 Sonnet + PyMuPDF) 
-      ↳ Validator Agent (Deterministic Python) 
+      ↳ Validator Agent (Hybrid: Deterministic Math + Non-Deterministic Semantic AI)
           ↳ Cross-Validator Node 
               ↳ Router Agent (Decision & Email Draft) 
                   ↳ SQLite Storage 

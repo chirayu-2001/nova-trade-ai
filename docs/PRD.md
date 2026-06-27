@@ -58,38 +58,41 @@ We employ a **Multi-Agent Architecture** pipeline: `Extractor Agent` → `Valida
 
 ### Why Three Agents? Why not one giant prompt?
 A single giant prompt ("Here is a PDF and a list of rules, tell me if it's approved and write the email") is catastrophic in enterprise environments. It conflates *reading* (probabilistic) with *math/logic* (deterministic), leading to hallucinations, silent approvals, and impossible debugging.
-By enforcing sharp agent boundaries:
-1.  **Extractor Agent (Executor):** Sole responsibility is to read the PDF and output structured JSON with confidence scores. It knows *nothing* about business rules.
-2.  **Validator Agent (Verifier):** Sole responsibility is to compare the JSON against customer rules. It uses deterministic Python code for math (e.g., weight tolerances) and string matching, eliminating AI hallucination in the validation phase.
-3.  **Router/Decision Agent (Planner):** Sole responsibility is to read the validation output and decide the outcome (Approve, Flag, Draft Email).
+By enforcing sharp agent boundaries, we align with the planner/executor/verifier pattern:
+1.  **Extractor Agent (Executor):** Sole responsibility is to read the PDF and output structured JSON with confidence scores. It uses a single vision model pass to maintain spatial layout context, which is critical for merged cells and complex tables.
+2.  **Validator Agent (Verifier):** Sole responsibility is to compare the JSON against customer rules. It operates using a hybrid approach: Layer 1 is deterministic (zero LLM cost) for exact matches and tolerances; Layer 2 uses fuzzy matching/embeddings; Layer 3 falls back to the LLM for complex semantic matching and unit conversions.
+3.  **Router/Decision Agent (Planner):** Sole responsibility is to read the validation output and decide the outcome (Approve, Flag, Draft Email). The decision logic is 100% deterministic to ensure safety (e.g., Any CRITICAL mismatch -> amend), while the email drafting uses the LLM for professional business writing.
 
 ### State and Orchestration
-Agents communicate via **structured handoffs** (passing strongly-typed Pydantic objects) orchestrated by **LangGraph**.
-*   **Crash Survival:** LangGraph maintains a state graph. We use a SQLite-backed checkpointer. If the server crashes during extraction, the state is persisted. Upon reboot, the pipeline resumes exactly at the failed node without duplicating work.
+Agents communicate via **structured handoffs** orchestrated by **LangGraph**.
+*   **Crash Survival & State Management:** LangGraph maintains a state graph using a SQLite-backed checkpointer (migratable to Postgres for production). If the server crashes during extraction, the state is persisted. Upon reboot, the pipeline resumes exactly at the failed node.
+*   **Human-in-the-Loop:** LangGraph's `interrupt_before` functionality inherently supports pausing the pipeline after validation, presenting results to the Cargo Group (CG) operator, and waiting for their review before sending any emails.
 
 ---
 
 ## 5. LLM & Tooling Choices
 
-*   **LLM (Extraction & Routing): Claude 3.5 Sonnet.** 
-    *   *Why:* Claude 3.5 Sonnet offers best-in-class vision capabilities with an excellent balance of cost, speed, and reasoning. In high-volume logistics, accurate extraction is paramount. Sonnet delivers structured JSON from complex PDFs swiftly.
-    *   *Fallback:* If the document scan is entirely illegible, Sonnet returns a low confidence score, which the Validator catches and routes directly to Human Review with an "Unreadable Document" tag.
+*   **LLM (Extraction, Validation & Routing): claude-sonnet-4-6.** 
+    *   *Why:* claude-sonnet-4-6 offers best-in-class vision capabilities for extraction (including native PDF support), and extremely reliable structured output and tool-calling capabilities. It strikes the ideal balance of accuracy (>95% on clean documents) and latency.
+    *   *Fallback:* If the document scan is entirely illegible, the model returns a low confidence score, which the Validator catches and routes directly to Human Review.
 *   **Orchestration: LangGraph.** 
-    *   *Why:* We need cyclic graphs (for retry loops if extraction fails schema validation) and durable state persistence. Standard LangChain chains are too linear and rigid.
-*   **Structured Output:** We aggressively use tool calling / structured outputs (JSON schema enforcement) in the Extractor and Router to ensure the Validator receives perfectly typed data. We *avoid* LLMs entirely in the Validator, relying strictly on deterministic Python code.
+    *   *Why:* We need cyclic graphs (for retry loops if extraction fails schema validation) and durable state persistence. It also easily supports extensibility without rewriting nodes.
+*   **Storage & Query Layer (Text-to-SQL):** SQLite for the database, combined with a natural language query layer using GPT-4o-mini to convert user questions into SQL via schema-aware prompting.
+*   **Structured Output & Tool Calling:** We aggressively use tool calling in the Extractor (for JSON schema enforcement), the Validator (for delegating deterministic math/fuzzy logic to python tools), and the Router to ensure perfectly typed data throughout the pipeline.
 
 ---
 
 ## 6. Trust, Failure Handling & Evals
 
 ### Stopping Hallucinations
-To prevent the agent from inventing a missing Bill of Lading number:
+To prevent the agent from inventing missing values:
 1.  **Strict Prompting + Fallbacks:** The prompt strictly dictates returning `null` if a field is missing.
-2.  **OCR Verification Layer:** We use PyMuPDF to extract raw text. If the LLM extracts an Invoice Number that does not exist anywhere in the raw OCR text, the Validator immediately flags it as a hallucination.
+2.  **OCR Verification Layer (DocTR/PyMuPDF):** We use a lightweight OCR pass as a verification layer. If the LLM extracts an Invoice Number that does not exist anywhere in the raw OCR text, it is flagged as a potential hallucination and the confidence score is forcibly dropped to 0.3.
 
-### Handling Low Confidence & Loops
-*   **No Silent Approvals:** The Extractor must emit a confidence score (0.0-1.0) for every field. If `confidence < 0.8`, the Validator marks the field as `uncertain`. Uncertain fields bypass auto-approval and force a human review.
-*   **Runaway Costs:** LangGraph is configured with a `recursion_limit` of 3. If the Extractor fails to produce valid JSON after 3 retries, the pipeline aborts, marks the status as `SYSTEM_ERROR`, and halts to prevent infinite LLM billing loops.
+### Handling Low Confidence & Severity-Based Routing
+*   **No Silent Approvals:** The Extractor must emit a confidence score (0.0-1.0) for every field. If `confidence < 0.85`, the Validator marks the field as uncertain. Any uncertain fields bypass auto-approval and force human review.
+*   **Severity Classification:** Validation mismatches are classified by severity (e.g., CRITICAL for wrong consignee, HIGH for weight mismatch >5%, MEDIUM/LOW for minor formatting). Any CRITICAL mismatch strictly mandates an amendment request. Any HIGH mismatch forces a human review.
+*   **Runaway Costs:** LangGraph is configured with a `recursion_limit` of 5. If the Extractor fails to produce valid JSON after retries, the pipeline aborts, marks the status as `SYSTEM_ERROR`, and halts to prevent infinite LLM billing loops.
 
 ### Evals
 *   **Offline Eval:** A test suite runs over a Golden Dataset of 100 historical shipments (clean, messy, missing docs). We measure **Extraction F1 Score** (Precision/Recall on fields) and **Validation Accuracy** (Did it catch the deliberate errors?).

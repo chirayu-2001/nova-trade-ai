@@ -10,12 +10,13 @@ from typing import Optional
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from backend.config.settings import settings
 from backend.models.database import (
+    get_document_file_path,
     get_pipeline_checkpoint,
     get_shipment_detail,
     get_shipments,
@@ -249,6 +250,20 @@ async def shipment_detail(shipment_id: str):
     if not result:
         return JSONResponse(status_code=404, content={"error": "Shipment not found"})
     return result
+
+
+@app.get("/api/documents/{document_id}/file")
+async def document_file(document_id: str):
+    """Serve the original source PDF for a document so it can be previewed in the UI."""
+    doc = get_document_file_path(document_id)
+    if not doc or not doc.get("file_path") or not os.path.exists(doc["file_path"]):
+        return JSONResponse(status_code=404, content={"error": "Document file not found"})
+    return FileResponse(
+        doc["file_path"],
+        media_type="application/pdf",
+        filename=doc.get("file_name") or "document.pdf",
+        content_disposition_type="inline",
+    )
 
 
 @app.put("/api/shipments/{shipment_id}/approve")

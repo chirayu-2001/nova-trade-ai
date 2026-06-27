@@ -8,8 +8,9 @@ import json
 import logging
 import time
 import uuid
+import os
 
-import anthropic
+from litellm import completion
 
 from backend.config.settings import settings
 from backend.models.schemas import (
@@ -28,7 +29,12 @@ from backend.services.pdf_processor import (
 
 logger = logging.getLogger(__name__)
 
-client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+# Ensure API keys are set in environment for litellm
+if settings.anthropic_api_key:
+    os.environ["ANTHROPIC_API_KEY"] = settings.anthropic_api_key
+if settings.openai_api_key:
+    os.environ["OPENAI_API_KEY"] = settings.openai_api_key
+
 EXTRACTION_SYSTEM_PROMPT = load_prompt("extraction_system.md")
 
 
@@ -143,27 +149,44 @@ def extract_document(
     for attempt in range(settings.max_retries + 1):
         try:
             if attempt == 0:
-                # Primary path: native PDF via Claude
+                # Primary path: native PDF via Claude if applicable
+                is_anthropic = model_used.startswith("anthropic/") or "claude" in model_used.lower()
                 pdf_base64 = load_pdf_as_base64(pdf_path)
-                response = client.messages.create(
+                
+                if is_anthropic:
+                    content = [
+                        {
+                            "type": "document",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "application/pdf",
+                                "data": pdf_base64,
+                            },
+                        },
+                        {"type": "text", "text": user_prompt},
+                    ]
+                else:
+                    logger.info("Model is not Anthropic. Converting PDF to images for vision extraction.")
+                    page_images = pdf_to_images(pdf_path, dpi=150)
+                    content = [
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/png;base64,{img}"}
+                        }
+                        for img in page_images
+                    ]
+                    content.append({"type": "text", "text": user_prompt})
+
+                messages = [
+                    {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
+                    {"role": "user", "content": content}
+                ]
+                
+                response = completion(
                     model=model_used,
                     max_tokens=4096,
                     temperature=settings.extraction_temperature,
-                    messages=[{
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "document",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": "application/pdf",
-                                    "data": pdf_base64,
-                                },
-                            },
-                            {"type": "text", "text": user_prompt},
-                        ],
-                    }],
-                    system=EXTRACTION_SYSTEM_PROMPT,
+                    messages=messages,
                 )
             else:
                 # Fallback: convert to images at 150 DPI
@@ -171,26 +194,27 @@ def extract_document(
                 page_images = pdf_to_images(pdf_path, dpi=150)
                 image_content = [
                     {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "image/png",
-                            "data": img,
-                        },
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{img}"
+                        }
                     }
                     for img in page_images
                 ]
                 image_content.append({"type": "text", "text": user_prompt})
-                response = client.messages.create(
+                messages = [
+                    {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
+                    {"role": "user", "content": image_content}
+                ]
+                response = completion(
                     model=model_used,
                     max_tokens=4096,
                     temperature=settings.extraction_temperature,
-                    messages=[{"role": "user", "content": image_content}],
-                    system=EXTRACTION_SYSTEM_PROMPT,
+                    messages=messages,
                 )
 
-            extraction_response = response.content[0].text
-            tokens_used = response.usage.input_tokens + response.usage.output_tokens
+            extraction_response = response.choices[0].message.content
+            tokens_used = response.usage.prompt_tokens + response.usage.completion_tokens
             break
 
         except Exception as e:

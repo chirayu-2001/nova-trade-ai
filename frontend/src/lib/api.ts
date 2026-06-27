@@ -37,6 +37,7 @@ export interface DocumentDetail {
   id: string;
   document_type: string;
   file_name: string;
+  file_path?: string;
   extracted_data: Record<string, { value: string | null; confidence: number; source_snippet: string | null }>;
   extraction_confidence_avg: number;
   processing_time_ms: number;
@@ -93,6 +94,10 @@ export async function processSample(folder: string, customerId: string) {
   form.append('customer_id', customerId);
   const res = await fetch(`${API}/process-sample`, { method: 'POST', body: form });
   return res.json();
+}
+
+export function documentFileUrl(documentId: string): string {
+  return `${API}/documents/${documentId}/file`;
 }
 
 export async function getShipments(): Promise<ShipmentSummary[]> {

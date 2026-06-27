@@ -5,18 +5,18 @@
 The following diagram illustrates the data flow, agent boundaries, and state management within the Nova platform.
 
 ```mermaid
-graph TD
+graph LR
     A[Supplier Email / Trigger] -->|Email Parsing + Attachments| B(LangGraph Orchestrator)
     
-    subgraph Nova Multi-Agent Pipeline [Stateful LangGraph Pipeline]
-        direction TB
-        E[Extractor Agent<br>Claude 3.5 Sonnet + PyMuPDF] -->|Structured JSON + Confidence| V[Validator Agent<br>Deterministic Python]
-        V -->|Per-doc Validation| C[Cross-Validator Node<br>Cross-doc checks]
-        C -->|Aggregated Result| R[Router Agent<br>Claude 3.5 Sonnet]
-        R -->|Decision + Draft Email| S[Storage Node]
+    subgraph Nova_Pipeline ["Stateful LangGraph Pipeline"]
+        direction LR
+        E["Extractor Agent<br>Claude 3.5 Sonnet + PyMuPDF"] -->|Structured JSON + Confidence| V["Validator Agent<br>Claude Tool-Calling Agent"]
+        V -->|Per-doc Validation| C["Cross-Validator Node<br>Cross-doc checks"]
+        C -->|Aggregated Result| R["Router Agent<br>Claude 3.5 Sonnet"]
+        R -->|Decision + Draft Email| S["Storage Node"]
     end
     
-    B --> Nova Multi-Agent Pipeline
+    B --> Nova_Pipeline
     
     S -->|Persist state & verified data| DB[(SQLite / ClickHouse)]
     
@@ -29,7 +29,7 @@ graph TD
 
 **Key Architectural Decisions:**
 *   **State Lives in the Database:** LangGraph’s state is backed by a SQLite checkpointer. This means the graph state is fully serialized and saved at every node transition, ensuring durability.
-*   **Sharp Agent Boundaries:** LLMs are restricted strictly to extraction and drafting (where probabilistic reasoning shines). The Validator is 100% deterministic code.
+*   **Sharp Agent Boundaries:** LLMs handle extraction, validation, and drafting. The Validator Agent is a true Tool-Calling Agent that uses Anthropic's parallel tool calling to delegate complex math and string logic to deterministic Python functions, completely eliminating hallucination risk for numeric checks while maintaining the intelligence of an LLM.
 
 ---
 
@@ -98,7 +98,7 @@ Using **Claude 3.5 Sonnet**, the unit economics are highly favorable for large-s
 ### Where is the Slowest Hop?
 The **Extractor Agent** is the absolute bottleneck. 
 *   **Extraction:** Processing 4 heavy PDFs via the Vision API takes **~4-6 seconds** (even when parallelized, due to network I/O and Anthropic rate limits).
-*   **Validation:** Pure Python (regex, math). Takes **< 0.05 seconds**.
+*   **Validation:** Hybrid. Pure Python rules (regex, math) take **< 0.05 seconds**, while non-deterministic semantic reasoning takes **~1-2 seconds**.
 *   **Routing/Drafting:** LLM generation of a short text email. Takes **~1.5 - 2 seconds**.
 
 ### How to Fix It

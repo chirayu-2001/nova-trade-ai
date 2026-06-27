@@ -3,12 +3,12 @@ import {
   CheckCircle, XCircle, AlertTriangle, Upload, FileText,
   Loader2, Send, ChevronDown, ChevronUp, Package,
   Anchor, Receipt, ClipboardList, Award, RotateCcw,
-  Clock, Zap
+  Clock, Zap, Eye, X, ExternalLink
 } from 'lucide-react';
 import {
   uploadDocuments, processSample, getShipmentDetail,
   getSampleShipments, getCustomers, approveShipment, sendAmendment,
-  subscribePipelineStatus,
+  subscribePipelineStatus, documentFileUrl,
   type ShipmentDetail, type SampleShipment, type DocumentDetail, type FieldValidation
 } from '../lib/api';
 import { confidenceBadge, statusIcon, decisionBadge, severityBadge, fieldLabel } from '../lib/helpers';
@@ -22,6 +22,7 @@ const DOC_TYPE_CONFIG: Record<string, { icon: typeof FileText; label: string; co
   certificate_of_origin: { icon: Award, label: 'Certificate of Origin', color: '#F59E0B' },
 };
 
+// Maps each sample shipment folder to the customer rule set it should be validated against.
 const SAMPLE_CUSTOMER_MAP: Record<string, string> = {
   'shipment_1': 'american_home_furnishings',
   'shipment_2': 'homestyle_germany',
@@ -147,6 +148,7 @@ export default function PipelineView() {
   const [expandedField, setExpandedField] = useState<string | null>(null);
   const [showConsolidated, setShowConsolidated] = useState(false);
   const [draftEmail, setDraftEmail] = useState('');
+  const [viewerDoc, setViewerDoc] = useState<DocumentDetail | null>(null);
 
   useEffect(() => {
     getCustomers().then(setCustomers).catch(() => {});
@@ -181,13 +183,16 @@ export default function PipelineView() {
   }, [files, customerId]);
 
   const handleSample = useCallback(async (folder: string) => {
+    // Each sample ships with its own matching customer rule set — apply it automatically.
+    const sampleCustomer = SAMPLE_CUSTOMER_MAP[folder] || customerId;
+    setCustomerId(sampleCustomer);
     setProcessing(true);
     setPipelineStatus('incoming');
     setDetail(null);
     setShowConsolidated(false);
     setFiles([]);
     try {
-      const res = await processSample(folder, customerId);
+      const res = await processSample(folder, sampleCustomer);
       setShipmentId(res.shipment_id);
       const es = subscribePipelineStatus(res.shipment_id, (data) => {
         setPipelineStatus(data.status as string);
@@ -231,6 +236,8 @@ export default function PipelineView() {
     setSelectedDocIndex(0);
   };
 
+  const customerNameById = Object.fromEntries(customers.map(c => [c.customer_id, c.customer_name]));
+
   // Determine current phase
   const phase = detail ? 'results' : processing ? 'processing' : 'upload';
   const selectedDoc = detail?.documents?.[selectedDocIndex] || null;
@@ -246,6 +253,10 @@ export default function PipelineView() {
           {/* Customer Selector */}
           <div className="glass-panel p-6">
             <label className="section-title">Customer Rule Set</label>
+            <p className="text-muted" style={{ fontSize: '0.85rem', margin: '-0.5rem 0 0.75rem' }}>
+              Pick the rule set only when uploading your own files. Sample shipments below already
+              know their customer and apply the matching rule set automatically.
+            </p>
             <select
               value={customerId}
               onChange={e => setCustomerId(e.target.value)}
@@ -296,19 +307,31 @@ export default function PipelineView() {
           {/* Sample Shipments */}
           <div className="glass-panel p-6">
             <h3 className="section-title"><Package size={20} /> Or Process a Sample Shipment</h3>
+            <p className="text-muted" style={{ fontSize: '0.85rem', margin: '-0.5rem 0 1rem' }}>
+              Each sample is tagged with the customer rule set it will be validated against — no need to choose one first.
+            </p>
             <div className="grid-container">
-              {Object.entries(samples).map(([folder, s]) => (
-                <div
-                  key={folder}
-                  onClick={() => handleSample(folder)}
-                  className="card interactive"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-mono text-gradient-primary" style={{ fontSize: '1rem', fontWeight: 600 }}>{s.id}</span>
+              {Object.entries(samples).map(([folder, s]) => {
+                const ruleId = SAMPLE_CUSTOMER_MAP[folder];
+                const ruleName = (ruleId && customerNameById[ruleId]) || ruleId;
+                return (
+                  <div
+                    key={folder}
+                    onClick={() => handleSample(folder)}
+                    className="card interactive"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-mono text-gradient-primary" style={{ fontSize: '1rem', fontWeight: 600 }}>{s.id}</span>
+                    </div>
+                    <p className="text-muted" style={{ fontSize: '0.8rem' }}>{s.route} · {s.trade}</p>
+                    {ruleName && (
+                      <div className="badge badge-neutral sample-rule-badge" title={`Validated against ${ruleName}'s rule set`}>
+                        <ClipboardList size={11} /> {ruleName}
+                      </div>
+                    )}
                   </div>
-                  <p className="text-muted" style={{ fontSize: '0.8rem' }}>{s.route} · {s.trade}</p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </>
@@ -435,7 +458,14 @@ export default function PipelineView() {
                             </div>
                           )}
                         </div>
-                        <div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="doc-view-btn"
+                            title="Preview original document"
+                            onClick={(e) => { e.stopPropagation(); setViewerDoc(doc); }}
+                          >
+                            <Eye size={16} />
+                          </button>
                           {status === 'success' && <CheckCircle size={18} className="text-success" />}
                           {status === 'error' && <XCircle size={18} className="text-error" />}
                           {status === 'warning' && <AlertTriangle size={18} className="text-warning" />}
@@ -732,6 +762,39 @@ export default function PipelineView() {
             </div>
           )}
         </>
+      )}
+
+      {/* ===== DOCUMENT PREVIEW MODAL ===== */}
+      {viewerDoc && (
+        <div className="pdf-modal-overlay" onClick={() => setViewerDoc(null)}>
+          <div className="pdf-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="pdf-modal-header">
+              <span className="flex items-center gap-2" style={{ fontWeight: 600, minWidth: 0 }}>
+                <FileText size={18} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
+                <span className="cell-truncate">{viewerDoc.file_name}</span>
+              </span>
+              <div className="flex items-center gap-2">
+                <a
+                  href={documentFileUrl(viewerDoc.id)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="doc-view-btn"
+                  title="Open in new tab"
+                >
+                  <ExternalLink size={16} />
+                </a>
+                <button className="doc-view-btn" title="Close" onClick={() => setViewerDoc(null)}>
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            <iframe
+              className="pdf-modal-frame"
+              src={documentFileUrl(viewerDoc.id)}
+              title={viewerDoc.file_name}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

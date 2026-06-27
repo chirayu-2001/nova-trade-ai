@@ -24,7 +24,7 @@ python-Levenshtein>=0.25.0
 
 # Observability (optional)
 # langfuse>=2.40.0
-# litellm>=1.40.0
+litellm>=1.40.0
 
 # Part 2
 watchdog>=4.0.0
