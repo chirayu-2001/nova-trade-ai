@@ -61,7 +61,7 @@ A single giant prompt ("Here is a PDF and a list of rules, tell me if it's appro
 By enforcing sharp agent boundaries, we align with the planner/executor/verifier pattern:
 1.  **Extractor Agent (Executor):** Sole responsibility is to read the PDF and output structured JSON with confidence scores. It uses a single vision model pass to maintain spatial layout context, which is critical for merged cells and complex tables.
 2.  **Validator Agent (Verifier):** Sole responsibility is to compare the JSON against customer rules. It operates using a hybrid approach: Layer 1 is deterministic (zero LLM cost) for exact matches and tolerances; Layer 2 uses fuzzy matching/embeddings; Layer 3 falls back to the LLM for complex semantic matching and unit conversions.
-3.  **Router/Decision Agent (Planner):** Sole responsibility is to read the validation output and decide the outcome (Approve, Flag, Draft Email). The decision logic is 100% deterministic to ensure safety (e.g., Any CRITICAL mismatch -> amend), while the email drafting uses the LLM for professional business writing.
+3.  **Router/Decision Agent (Planner):** Sole responsibility is to read the validation output and decide the outcome (Approve, Flag, Draft Email). The decision logic uses the LLM to intelligently evaluate discrepancies and generate detailed, human-readable reasoning. To ensure maximum safety, it is backed by a strict deterministic Python fallback mechanism that prevents hallucinations and guarantees critical errors always force an amendment. The LLM is then used again to draft a professional business email to the supplier.
 
 ### State and Orchestration
 Agents communicate via **structured handoffs** orchestrated by **LangGraph**.
@@ -124,5 +124,4 @@ To graduate from staging to a live 2-week pilot with a customer, the system must
 
 If we had two more weeks, we would build:
 1.  **Inbox Trigger Integration (Part 2):** Connect the pipeline to a live email inbox (e.g., via Microsoft Graph API or Gmail Pub/Sub) to auto-trigger the LangGraph pipeline the second a supplier emails documents.
-2.  **Cross-Document Consistency Checks:** Implement logic in the Validator to ensure that fields shared across documents (e.g., Gross Weight on the BOL vs. the Packing List) match perfectly, highlighting discrepancies between attachments.
-3.  **Interactive Feedback Loop:** Add a feature in the UI where if a CG operator corrects an extracted value, that correction is logged to a vector database (Weaviate) to few-shot prompt the Extractor agent on future runs for that specific supplier format.
+2.  **Interactive Feedback Loop:** Add a feature in the UI where if a CG operator corrects an extracted value, that correction is logged to a vector database (Weaviate) to few-shot prompt the Extractor agent on future runs for that specific supplier format.

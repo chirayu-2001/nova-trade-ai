@@ -12,10 +12,10 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # Model configuration
-    extraction_model: str = "anthropic/claude-3-5-sonnet-20241022"
-    validation_model: str = "anthropic/claude-3-5-sonnet-20241022"
-    routing_model: str = "anthropic/claude-3-5-sonnet-20241022"
-    query_model: str = "anthropic/claude-3-5-sonnet-20241022"
+    extraction_model: str = "claude-sonnet-4-6"
+    validation_model: str = "claude-sonnet-4-6"
+    routing_model: str = "claude-sonnet-4-6"
+    query_model: str = "claude-sonnet-4-6"
 
     extraction_temperature: float = 0.0
     validation_temperature: float = 0.0
