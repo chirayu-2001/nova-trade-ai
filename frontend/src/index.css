@@ -913,3 +913,58 @@ textarea.input-field {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
 }
+
+/* Query Markdown Styles */
+.query-markdown {
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+.query-markdown h1, .query-markdown h2, .query-markdown h3 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  color: var(--accent-primary);
+}
+.query-markdown h1 { font-size: 1.5rem; }
+.query-markdown h2 { font-size: 1.25rem; }
+.query-markdown h3 { font-size: 1.1rem; }
+.query-markdown p {
+  margin-bottom: 1rem;
+}
+.query-markdown ul, .query-markdown ol {
+  margin-left: 1.5rem;
+  margin-bottom: 1rem;
+}
+.query-markdown li {
+  margin-bottom: 0.25rem;
+}
+.query-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.query-markdown th, .query-markdown td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  text-align: left;
+}
+.query-markdown th {
+  background: rgba(0, 0, 0, 0.4);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.query-markdown tr:last-child td {
+  border-bottom: none;
+}
+.query-markdown strong {
+  color: #fff;
+}
+.query-markdown code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.9em;
+}

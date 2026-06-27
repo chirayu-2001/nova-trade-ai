@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Loader2, Search, ChevronDown, ChevronUp } from 'lucide-react';
 import { queryNL, type QueryResult } from '../lib/api';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 export default function QueryTab() {
   const [question, setQuestion] = useState('');
@@ -68,8 +70,10 @@ export default function QueryTab() {
 
       {result && (
         <div className="space-y-6">
-          <div className="glass-panel p-6" style={{ borderLeft: '4px solid var(--accent-primary)', background: 'var(--accent-primary-transparent)' }}>
-            <p style={{ fontSize: '1.1rem', fontWeight: 500 }}>{result.answer}</p>
+          <div className="glass-panel p-6 query-markdown" style={{ borderLeft: '4px solid var(--accent-primary)', background: 'var(--accent-primary-transparent)' }}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {result.answer}
+            </ReactMarkdown>
           </div>
 
           <div className="glass-panel p-6">
