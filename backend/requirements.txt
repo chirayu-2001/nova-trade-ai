@@ -1,0 +1,33 @@
+# LLM & Orchestration
+langgraph>=0.2.0
+langchain-core>=0.3.0
+langchain-anthropic>=0.3.0
+langchain-openai>=0.2.0
+anthropic>=0.40.0
+openai>=1.50.0
+
+# Backend
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+sse-starlette>=2.0.0
+
+# Document Processing
+PyMuPDF>=1.24.0
+
+# Data & Validation
+pydantic>=2.7.0
+pydantic-settings>=2.0.0
+pyyaml>=6.0
+thefuzz[speedup]>=0.22.0
+python-Levenshtein>=0.25.0
+
+# Observability (optional)
+# langfuse>=2.40.0
+litellm>=1.40.0
+
+# Part 2
+watchdog>=4.0.0
+
+# Utilities
+python-dotenv>=1.0.0

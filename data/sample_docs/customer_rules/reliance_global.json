@@ -1,0 +1,20 @@
+{
+  "customer_name": "Al-Futtaim Trading LLC",
+  "applies_to": "shipment_7, shipment_8, shipment_9",
+  "rules": {
+    "consignee_name": {
+      "match_type": "exact",
+      "expected": "Al-Futtaim Trading LLC",
+      "case_sensitive": false
+    },
+    "port_of_loading": {
+      "match_type": "exact",
+      "expected": "Nhava Sheva (JNPT), India"
+    },
+    "weight_cross_doc": {
+      "match_type": "cross_document_consistent",
+      "tolerance_pct": 1.0,
+      "field": "gross_weight"
+    }
+  }
+}

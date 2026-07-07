@@ -1,0 +1,31 @@
+{
+  "customer_name": "Al Baraka Trading LLC",
+  "applies_to": "shipment_4",
+  "rules": {
+    "consignee_name": {
+      "match_type": "exact",
+      "expected": "Al Baraka Trading LLC",
+      "case_sensitive": false
+    },
+    "hs_code_format": {
+      "match_type": "format",
+      "pattern": "####.##.##",
+      "digits": 8
+    },
+    "incoterm": {
+      "match_type": "exact",
+      "expected": "CFR Jebel Ali"
+    },
+    "weight_cross_doc": {
+      "match_type": "cross_document_consistent",
+      "tolerance_pct": 2.0
+    },
+    "food_safety_docs": {
+      "match_type": "present",
+      "documents": [
+        "certificate_of_origin",
+        "phytosanitary_certificate"
+      ]
+    }
+  }
+}
